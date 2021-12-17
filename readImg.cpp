@@ -2,10 +2,15 @@
 #include <unistd.h>
 #include <fstream>
 
+#include "image.hpp"
+#include "typedefs.hpp"
+#include "blur.hpp"
+
 using std::cout;
 using std::endl;
 using std::ifstream;
 using std::ofstream;
+using namespace std;
 
 #pragma pack(1)
 #pragma once
@@ -38,8 +43,19 @@ typedef struct tagBITMAPINFOHEADER
   DWORD biClrImportant;
 } BITMAPINFOHEADER, *PBITMAPINFOHEADER;
 
+
 int rows;
 int cols;
+vector<vector<vector<int>>> pixels;
+
+void initialize_pixels()
+{
+  for (int i = 0; i < rows; i++) {
+    vector<int> pixel(color_pallete, 0);
+    vector<vector<int>> row(cols, pixel);
+    pixels.push_back(row);
+  }
+}
 
 bool fillAndAllocate(char *&buffer, const char *fileName, int &rows, int &cols, int &bufferSize)
 {
@@ -66,7 +82,7 @@ bool fillAndAllocate(char *&buffer, const char *fileName, int &rows, int &cols, 
   }
   else
   {
-    cout << "File" << fileName << " doesn't exist!" << endl;
+    cout << "File " << fileName << " doesn't exist!" << endl;
     return 0;
   }
 }
@@ -75,6 +91,7 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
 {
   int count = 1;
   int extra = cols % 4;
+
   for (int i = 0; i < rows; i++)
   {
     count += extra;
@@ -84,15 +101,15 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
         switch (k)
         {
         case 0:
-          // fileReadBuffer[end - count] is the red value
+          pixels[i][j][Image::RED] = -fileReadBuffer[end - count];
           break;
         case 1:
-          // fileReadBuffer[end - count] is the green value
+          pixels[i][j][Image::GREEN] = -fileReadBuffer[end - count];
           break;
         case 2:
-          // fileReadBuffer[end - count] is the blue value
+          pixels[i][j][Image::BLUE] = -fileReadBuffer[end - count];
           break;
-        // go to the next position in the buffer
+        count++;
         }
       }
   }
@@ -117,15 +134,15 @@ void writeOutBmp24(char *fileBuffer, const char *nameOfFileToCreate, int bufferS
         switch (k)
         {
         case 0:
-          // write red value in fileBuffer[bufferSize - count]
+          fileBuffer[bufferSize - count] = char(pixels[i][j][Image::RED]);
           break;
         case 1:
-          // write green value in fileBuffer[bufferSize - count]
+          fileBuffer[bufferSize - count] = char(pixels[i][j][Image::GREEN]);
           break;
         case 2:
-          // write blue value in fileBuffer[bufferSize - count]
+          fileBuffer[bufferSize - count] = char(pixels[i][j][Image::BLUE]);
           break;
-        // go to the next position in the buffer
+        count++;
         }
       }
   }
@@ -143,9 +160,13 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // read input file
-  // apply filters
-  // write output file
+  initialize_pixels();
+
+  getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer);
+
+  grayscale(rows, cols, pixels);
+
+  writeOutBmp24(fileBuffer, "ut2.bmp", bufferSize);
 
   return 0;
 }
