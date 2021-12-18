@@ -12,10 +12,6 @@ private:
 
 public:
     Image(vector<vector<vector<int>> > &pixels);
-    //Smoothing
-    //Sepia
-    //Wash out
-    //X on img
     enum Color
     {
         RED,

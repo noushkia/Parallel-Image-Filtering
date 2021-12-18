@@ -18,6 +18,15 @@ using namespace std::chrono;
 #pragma pack(1)
 #pragma once
 
+#define WHITE {255, 255, 255}
+#define TOTAL_FILTERS 4
+#define BLUR 0
+#define SEPIA 1
+#define MEAN 2
+#define ADDX 3
+
+const string output_dir = "FIltered/";
+
 typedef int LONG;
 typedef unsigned short WORD;
 typedef unsigned int DWORD;
@@ -52,7 +61,6 @@ int cols;
 vector<vector<vector<unsigned char>>> pixels;
 vector<vector<vector<unsigned char>>> real_pixels;
 
-void grayscale();
 void blur(int lvl);
 void sepia();
 void mean();
@@ -126,7 +134,7 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
   }
 }
 
-void writeOutBmp24(char *fileBuffer, const char *nameOfFileToCreate, int bufferSize)
+void writeOutBmp24(char *fileBuffer, const string &nameOfFileToCreate, int bufferSize)
 {
   std::ofstream write(nameOfFileToCreate);
   if (!write)
@@ -184,48 +192,32 @@ int main(int argc, char *argv[])
   pixels = real_pixels;
 
   auto total_start = high_resolution_clock::now();
-  start = high_resolution_clock::now();
 
-  blur(1);
+  for (int i = 0; i < TOTAL_FILTERS; i++) {
+    start = high_resolution_clock::now();
+    switch (i)
+    {
+    case BLUR:
+      blur(1);
+      break;
+    case SEPIA:
+      sepia();
+      break;
+    case MEAN:
+      mean();
+      break;
+    case ADDX:
+      add_X(2);
+      break;
+    }
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout << "Time taken: " << duration.count() << " ms" << endl;
 
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  cout << "Time taken: " << duration.count() << " ms" << endl;
-  
-  writeOutBmp24(fileBuffer, "blur.bmp", bufferSize);
-  real_pixels = pixels;
-  
-  start = high_resolution_clock::now();
-
-  sepia();
-
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  cout << "Time taken: " << duration.count() << " ms" << endl;
-  
-  writeOutBmp24(fileBuffer, "sepia.bmp", bufferSize);
-  real_pixels = pixels;
-
-  start = high_resolution_clock::now();
-
-  mean();
-
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  cout << "Time taken: " << duration.count() << " ms" << endl;
-
-  writeOutBmp24(fileBuffer, "mean.bmp", bufferSize);
-  real_pixels = pixels;
-
-  start = high_resolution_clock::now();
-
-  add_X(2);
-
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  cout << "Time taken: " << duration.count() << " ms" << endl;
-
-  writeOutBmp24(fileBuffer, "add_X.bmp", bufferSize);
+    string filename = output_dir + "filter" + to_string(i) + ".bmp";
+    writeOutBmp24(fileBuffer, filename, bufferSize);
+    real_pixels = pixels;
+  }
 
   auto total_end = high_resolution_clock::now();
   duration = duration_cast<microseconds>(total_end - total_start);
@@ -314,14 +306,12 @@ void add_X(int width)
 
 	for (int i = width; i < rows-width; i++)
         for (int j = -width; j <= width; j++) {
-            // cout << int(pixels[i+j][i+j][0]) << endl;
-            pixels[i+j][i+j] = {255, 255,  255};
-            pixels[i][i+j] = {255, 255,  255};
-            pixels[i+j][i] = {255, 255,  255};
-            pixels[i+j][cols - 1 - i-j] = {255, 255,  255};
-            pixels[i][cols - 1 - i-j] = {255, 255,  255};
-            pixels[i+j][cols - 1 - i] = {255, 255,  255};
-            // cout << int(pixels[i+j][i+j][0]) << endl;
+            pixels[i+j][i+j] = WHITE;
+            pixels[i][i+j] = WHITE;
+            pixels[i+j][i] = WHITE;
+            pixels[i+j][cols - 1 - i-j] = WHITE;
+            pixels[i][cols - 1 - i-j] = WHITE;
+            pixels[i+j][cols - 1 - i] = WHITE;
         }
 
     cout << "Filter successfull" << endl;
