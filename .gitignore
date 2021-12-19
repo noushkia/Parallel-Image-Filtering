@@ -2,3 +2,5 @@
 *.o
 *.out
 witharr.cpp
+*.zip
+*.bmp
