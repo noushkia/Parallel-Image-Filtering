@@ -23,15 +23,6 @@ using namespace std::chrono;
 #pragma pack(1)
 #pragma once
 
-#define TOTAL_FILTERS 4
-#define BLUR 0
-#define SEPIA 1
-#define MEAN 2
-#define ADDX 3
-
-const string output_dir = "Filtered/";
-const int WHITE[] = {255, 255, 255};
-
 typedef struct tagBITMAPFILEHEADER
 {
   WORD bfType;
@@ -56,12 +47,11 @@ typedef struct tagBITMAPINFOHEADER
   DWORD biClrImportant;
 } BITMAPINFOHEADER, *PBITMAPINFOHEADER;
 
-
 int rows;
 int cols;
 RGBS pixels;
 RGBS real_pixels;
-RGBS pixels_thread;
+vector<RGBS> pixels_threads;
 
 void blur(int lvl);
 void sepia();
@@ -70,19 +60,16 @@ void add_X(int width);
 
 void initialize_pixels()
 {
-  pixels = new unsigned char**[rows];
   real_pixels = new unsigned char**[rows];
   for (int i = 0; i < rows; i++) {
-    pixels[i] = new unsigned char*[cols];
     real_pixels[i] = new unsigned char*[cols];
     for (int j = 0; j < cols; j++) {
-      pixels[i][j] = new unsigned char[color_pallete];
       real_pixels[i][j] = new unsigned char[color_pallete];
     }
   }
 }
 
-void set_color(int row, int col, const int color[])
+void set_color(int row, int col, const int color[]) // Move to threads
 {
   for (int i = 0; i < color_pallete; i++)
     pixels[row][col][i] = color[i];
@@ -122,38 +109,45 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer) // Mu
 {
   int count = 1;
   int extra = cols % 4;
-  int NUMBER_OF_THREADS = rows / 50;
+  int NUMBER_OF_THREADS = rows / TH_ROW;
 
   pthread_t threads[NUMBER_OF_THREADS];
-  int return_code;
+
+  vector<struct Row> thread_rows;
+
   for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
   {
     count += extra;
-    struct Row row {
+
+    thread_rows.push_back({
       count,
       end,
       cols,
+      TH_ROW,
       fileReadBuffer,
-      pixels_thread[tid]
-    };
-    
-    return_code = pthread_create(&threads[tid], NULL, getImg, &row);
+      pixels_threads[tid]
+    });
 
+    count += TH_ROW*cols*color_pallete;
+  }
+  
+  for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
+  {
+    int return_code = pthread_create(&threads[tid], NULL, getImg, &thread_rows[tid]);
 		if (return_code)
 		{
-      printf("ERROR; return code from pthread_create() is %d\n", return_code);
+      cerr << "ERROR! return code from pthread_create() is " << return_code << endl;
       exit(-1);
 		}
 
-    count += cols*3;
   }
 
-  for (long tid = 0 ; tid < NUMBER_OF_THREADS ; tid++)
+  for (int tid = 0 ; tid < NUMBER_OF_THREADS ; tid++)
   {
-    return_code = pthread_join(threads[tid], NULL);
+    int return_code = pthread_join(threads[tid], NULL);
     if (return_code)
     {
-      printf("ERROR; return code from pthread_join() is %d\n", return_code);
+      cerr << "ERROR! return code from pthread_join() is " << return_code << endl;
       exit(-1);
     }
   }
@@ -167,28 +161,32 @@ void writeOutBmp24(char *fileBuffer, const string &nameOfFileToCreate, int buffe
     cout << "Failed to write " << nameOfFileToCreate << endl;
     return;
   }
+
   int count = 1;
   int extra = cols % 4;
-  for (int i = 0; i < rows; i++)
+  for (int tid = 0; tid < rows/TH_ROW; tid++)
   {
-    count += extra;
-    for (int j = cols - 1; j >= 0; j--)
-      for (int k = 0; k < 3; k++)
-      {
-        switch (k)
+    for (int i = 0; i < TH_ROW; i++)
+    {
+      count += extra;
+      for (int j = cols - 1; j >= 0; j--)
+        for (int k = 0; k < 3; k++)
         {
-        case 0:
-          fileBuffer[bufferSize - count] = pixels_thread[i][j][RED];
-          break;
-        case 1:
-          fileBuffer[bufferSize - count] = pixels_thread[i][j][GREEN];
-          break;
-        case 2:
-          fileBuffer[bufferSize - count] = pixels_thread[i][j][BLUE];
-          break;
+          switch (k)
+          {
+          case 0:
+            fileBuffer[bufferSize - count] = pixels_threads[tid][i][j][RED];
+            break;
+          case 1:
+            fileBuffer[bufferSize - count] = pixels_threads[tid][i][j][GREEN];
+            break;
+          case 2:
+            fileBuffer[bufferSize - count] = pixels_threads[tid][i][j][BLUE];
+            break;
+          }
+          count++;
         }
-        count++;
-      }
+    }
   }
   write.write(fileBuffer, bufferSize);
 }
@@ -220,7 +218,7 @@ void apply_filters()
 
     start = high_resolution_clock::now();
 
-    real_pixels = pixels;
+    // real_pixels = pixels_threads;
 
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
@@ -234,28 +232,27 @@ void apply_filters()
 
 void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
 {
-  int NUMBER_OF_THREADS = rows;
+  int NUMBER_OF_THREADS = rows / TH_ROW;
 
-  pixels_thread = initialize_pixels_thread(NUMBER_OF_THREADS, cols);
+  initialize_pixels_threads(NUMBER_OF_THREADS, TH_ROW, cols, pixels_threads);
 
   auto start = high_resolution_clock::now();
 
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer); // Secondary Hotspot
 
-  auto stop = high_resolution_clock::now();  
+  auto stop = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>(stop - start);
   cout << "Time taken for reading image: " << std::fixed
                                            << std::setprecision(2)
                                            << duration.count()/1000.0 << " ms" << endl;
 
-  pixels = real_pixels;
+  // real_pixels = pixels_threads;
 
   auto serial_start = high_resolution_clock::now();
 
   // apply_filters();
 
   writeOutBmp24(fileBuffer, "output.bmp", bufferSize);
-
 
   auto serial_end = high_resolution_clock::now();
   auto serial_duration = duration_cast<microseconds>(serial_end - serial_start);
