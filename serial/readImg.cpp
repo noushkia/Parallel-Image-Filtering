@@ -7,7 +7,6 @@
 #include <iomanip>
 
 #include "typedefs.hpp"
-#include "image.hpp"
 
 using std::cout;
 using std::endl;
@@ -16,51 +15,12 @@ using std::ofstream;
 using namespace std;
 using namespace std::chrono;
 
-#pragma pack(1)
-#pragma once
-
-#define TOTAL_FILTERS 4
-#define BLUR 0
-#define SEPIA 1
-#define MEAN 2
-#define ADDX 3
-
-const string output_dir = "Filtered/";
-const int WHITE[] = {255, 255, 255};
-
-typedef int LONG;
-typedef unsigned short WORD;
-typedef unsigned int DWORD;
-
-typedef struct tagBITMAPFILEHEADER
-{
-  WORD bfType;
-  DWORD bfSize;
-  WORD bfReserved1;
-  WORD bfReserved2;
-  DWORD bfOffBits;
-} BITMAPFILEHEADER, *PBITMAPFILEHEADER;
-
-typedef struct tagBITMAPINFOHEADER
-{
-  DWORD biSize;
-  LONG biWidth;
-  LONG biHeight;
-  WORD biPlanes;
-  WORD biBitCount;
-  DWORD biCompression;
-  DWORD biSizepixels;
-  LONG biXPelsPerMeter;
-  LONG biYPelsPerMeter;
-  DWORD biClrUsed;
-  DWORD biClrImportant;
-} BITMAPINFOHEADER, *PBITMAPINFOHEADER;
-
-
 int rows;
 int cols;
-unsigned char*** pixels;
-unsigned char*** real_pixels;
+RGBS pixels;
+RGBS real_pixels;
+unsigned char avg[color_pallete];
+
 
 void blur(int lvl);
 void sepia();
@@ -85,6 +45,18 @@ void set_color(int row, int col, const int color[])
 {
   for (int i = 0; i < color_pallete; i++)
     pixels[row][col][i] = color[i];
+}
+
+void update_real_pixels()
+{
+  for (int i = 0; i < rows; i++)
+  {
+    for (int j = 0; j < cols; j++)
+    {
+      for (int k = 0; k < color_pallete; k++)
+        real_pixels[i][j][k] = pixels[i][j][k];
+    }
+  }
 }
 
 bool fillAndAllocate(char *&buffer, const char *fileName, int &rows, int &cols, int &bufferSize)
@@ -131,13 +103,13 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
         switch (k)
         {
         case 0:
-          real_pixels[i][j][Image::RED] = fileReadBuffer[end - count];
+          real_pixels[i][j][RED] = fileReadBuffer[end - count];
           break;
         case 1:
-          real_pixels[i][j][Image::GREEN] = fileReadBuffer[end - count];
+          real_pixels[i][j][GREEN] = fileReadBuffer[end - count];
           break;
         case 2:
-          real_pixels[i][j][Image::BLUE] = fileReadBuffer[end - count];
+          real_pixels[i][j][BLUE] = fileReadBuffer[end - count];
           break;
         }
         count++;
@@ -164,19 +136,34 @@ void writeOutBmp24(char *fileBuffer, const string &nameOfFileToCreate, int buffe
         switch (k)
         {
         case 0:
-          fileBuffer[bufferSize - count] = pixels[i][j][Image::RED];
+          fileBuffer[bufferSize - count] = pixels[i][j][RED];
           break;
         case 1:
-          fileBuffer[bufferSize - count] = pixels[i][j][Image::GREEN];
+          fileBuffer[bufferSize - count] = pixels[i][j][GREEN];
           break;
         case 2:
-          fileBuffer[bufferSize - count] = pixels[i][j][Image::BLUE];
+          fileBuffer[bufferSize - count] = pixels[i][j][BLUE];
           break;
         }
         count++;
       }
   }
   write.write(fileBuffer, bufferSize);
+}
+
+void set_total_avg()
+{
+  int sum[color_pallete];
+  for (int k = 0; k < color_pallete; k++)
+    sum[k] = 0;
+
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+      for (int k = 0; k < color_pallete; k++)
+        sum[k] += real_pixels[i][j][k];
+      
+  for (int k = 0; k < color_pallete; k++)
+    avg[k] = sum[k] / (rows*cols);
 }
 
 void apply_filters()
@@ -192,6 +179,7 @@ void apply_filters()
       sepia();
       break;
     case MEAN:
+      set_total_avg();
       mean();
       break;
     case ADDX:
@@ -206,7 +194,7 @@ void apply_filters()
 
     start = high_resolution_clock::now();
 
-    real_pixels = pixels;
+    update_real_pixels();    
 
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
@@ -293,49 +281,34 @@ void blur(int lvl)
 
 void sepia()
 {
-    cout << "Initiating sepia filter" << endl;
+  cout << "Initiating sepia filter" << endl;
 
-    for (int i = 0; i < rows; i++)
-      for (int j = 0; j < cols; j++)
-      {
-        pixels[i][j][0] = min(((real_pixels[i][j][0]*0.393) + (real_pixels[i][j][1]*0.769) + (real_pixels[i][j][2]*0.189)), 255.00);
-        pixels[i][j][1] = min(((real_pixels[i][j][0]*0.349) + (real_pixels[i][j][1]*0.686) + (real_pixels[i][j][2]*0.168)), 255.00);
-        pixels[i][j][2] = min(((real_pixels[i][j][0]*0.272) + (real_pixels[i][j][1]*0.534) + (real_pixels[i][j][2]*0.131)), 255.00);
-      }
-
-    cout << "Filter successfull" << endl;
-    return;
-}
-
-void get_total_avg(unsigned char avg[])
-{
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
-      for (int k = 0; k < color_pallete; k++)
-        avg[k] += real_pixels[i][j][k];
+    {
+      pixels[i][j][RED] = 
+        min(((real_pixels[i][j][RED]*0.393) + (real_pixels[i][j][GREEN]*0.769) + (real_pixels[i][j][BLUE]*0.189)), 255.00);
+      pixels[i][j][GREEN] = 
+        min(((real_pixels[i][j][RED]*0.349) + (real_pixels[i][j][GREEN]*0.686) + (real_pixels[i][j][BLUE]*0.168)), 255.00);
+      pixels[i][j][BLUE] = 
+        min(((real_pixels[i][j][RED]*0.272) + (real_pixels[i][j][GREEN]*0.534) + (real_pixels[i][j][BLUE]*0.131)), 255.00);
+    }
 
-  for (int i = 0; i < color_pallete; i++)
-    avg[i] /= (rows*cols);
-
+  cout << "Filter successfull" << endl;
   return;
 }
 
 void mean()
 {
-    cout << "Initiating mean filter" << endl;
+  cout << "Initiating mean filter" << endl;
 
-    unsigned char avg[color_pallete];
-    for (int k = 0; k < color_pallete; k++)
-      avg[k] = 0;
-    get_total_avg(avg);
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+      for (int k = 0; k < color_pallete; k++)
+        pixels[i][j][k] = min((real_pixels[i][j][k]*0.4 + avg[k]*0.6), 255.00);
 
-    for (int i = 0; i < rows; i++)
-      for (int j = 0; j < cols; j++)
-        for (int k = 0; k < color_pallete; k++)
-          pixels[i][j][k] = min((real_pixels[i][j][k]*0.4 + avg[k]*0.6), 255.00);
-
-    cout << "Filter successfull" << endl;
-    return;
+  cout << "Filter successfull" << endl;
+  return;
 }
 
 void add_X(int width)

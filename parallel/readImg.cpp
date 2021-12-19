@@ -309,16 +309,17 @@ void* sepia(void *tid)
 
 void set_total_avg()
 {
+  int sum[color_pallete];
   for (int k = 0; k < color_pallete; k++)
-    avg[k] = 0;
+    sum[k] = 0;
 
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
       for (int k = 0; k < color_pallete; k++)
-        avg[k] += real_pixels[i][j][k];
+        sum[k] += real_pixels[i][j][k];
 
-  for (int i = 0; i < color_pallete; i++)
-    avg[i] /= (rows*cols);
+  for (int k = 0; k < color_pallete; k++)
+    avg[k] = sum[k] / (rows*cols);
 }
 
 void* mean(void *tid)
