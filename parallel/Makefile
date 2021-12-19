@@ -1,16 +1,16 @@
 CC=g++
 STD=-std=c++11
 CF=$(STD)
+LINK_FLAGS = -pthread
 
+ImageFilters.out: readImg.o threads.o
+	$(CC) $(CF) $(LINK_FLAGS) -o ImageFilters.out readImg.o threads.o
 
-ImageFilters.out: readImg.o image.o
-	$(CC) $(CF) -o ImageFilters.out readImg.o image.o
+$(BUILD_DIR)/readImg.o: readImg.cpp threads.hpp typedefs.hpp
+	$(CC) $(CF) $(LINK_FLAGS) -c readImg.cpp -o readImg.o
 
-$(BUILD_DIR)/readImg.o: readImg.cpp image.hpp typedefs.hpp
-	$(CC) $(CF) -c readImg.cpp -o readImg.o
-
-$(BUILD_DIR)/image.o: image.cpp image.hpp typedefs.hpp
-	$(CC) $(CF) -c image.cpp -o image.o
+$(BUILD_DIR)/threads.o: threads.cpp threads.hpp typedefs.hpp
+	$(CC) $(CF) -c threads.cpp -o threads.o
 
 .PHONY: clean
 clean:

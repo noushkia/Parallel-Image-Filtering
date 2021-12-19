@@ -1,14 +1,17 @@
 #include <iostream>
-#include <unistd.h>
 #include <fstream>
-#include <chrono>
+#include <vector>
 #include <math.h>
-#include <algorithm>
-#include <iomanip>
+#include <iomanip> 
 #include <pthread.h>
+#include <stdio.h>
+#include <time.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <chrono>
 
 #include "typedefs.hpp"
-#include "image.hpp"
+#include "threads.hpp"
 
 using std::cout;
 using std::endl;
@@ -28,10 +31,6 @@ using namespace std::chrono;
 
 const string output_dir = "Filtered/";
 const int WHITE[] = {255, 255, 255};
-
-typedef int LONG;
-typedef unsigned short WORD;
-typedef unsigned int DWORD;
 
 typedef struct tagBITMAPFILEHEADER
 {
@@ -60,9 +59,9 @@ typedef struct tagBITMAPINFOHEADER
 
 int rows;
 int cols;
-unsigned char*** pixels;
-unsigned char*** real_pixels;
-vector<unsigned char***> pixels_thread;
+RGBS pixels;
+RGBS real_pixels;
+RGBS pixels_thread;
 
 void blur(int lvl);
 void sepia();
@@ -119,31 +118,44 @@ bool fillAndAllocate(char *&buffer, const char *fileName, int &rows, int &cols, 
   }
 }
 
-void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
+void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer) // Multi-threaded
 {
   int count = 1;
   int extra = cols % 4;
+  int NUMBER_OF_THREADS = rows / 50;
 
-  for (int i = 0; i < rows; i++)
+  pthread_t threads[NUMBER_OF_THREADS];
+  int return_code;
+  for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
   {
     count += extra;
-    for (int j = cols - 1; j >= 0; j--)
-      for (int k = 0; k < 3; k++)
-      {
-        switch (k)
-        {
-        case 0:
-          real_pixels[i][j][Image::RED] = fileReadBuffer[end - count];
-          break;
-        case 1:
-          real_pixels[i][j][Image::GREEN] = fileReadBuffer[end - count];
-          break;
-        case 2:
-          real_pixels[i][j][Image::BLUE] = fileReadBuffer[end - count];
-          break;
-        }
-        count++;
-      }
+    struct Row row {
+      count,
+      end,
+      cols,
+      fileReadBuffer,
+      pixels_thread[tid]
+    };
+    
+    return_code = pthread_create(&threads[tid], NULL, getImg, &row);
+
+		if (return_code)
+		{
+      printf("ERROR; return code from pthread_create() is %d\n", return_code);
+      exit(-1);
+		}
+
+    count += cols*3;
+  }
+
+  for (long tid = 0 ; tid < NUMBER_OF_THREADS ; tid++)
+  {
+    return_code = pthread_join(threads[tid], NULL);
+    if (return_code)
+    {
+      printf("ERROR; return code from pthread_join() is %d\n", return_code);
+      exit(-1);
+    }
   }
 }
 
@@ -166,13 +178,13 @@ void writeOutBmp24(char *fileBuffer, const string &nameOfFileToCreate, int buffe
         switch (k)
         {
         case 0:
-          fileBuffer[bufferSize - count] = pixels[i][j][Image::RED];
+          fileBuffer[bufferSize - count] = pixels_thread[i][j][RED];
           break;
         case 1:
-          fileBuffer[bufferSize - count] = pixels[i][j][Image::GREEN];
+          fileBuffer[bufferSize - count] = pixels_thread[i][j][GREEN];
           break;
         case 2:
-          fileBuffer[bufferSize - count] = pixels[i][j][Image::BLUE];
+          fileBuffer[bufferSize - count] = pixels_thread[i][j][BLUE];
           break;
         }
         count++;
@@ -222,6 +234,10 @@ void apply_filters()
 
 void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
 {
+  int NUMBER_OF_THREADS = rows;
+
+  pixels_thread = initialize_pixels_thread(NUMBER_OF_THREADS, cols);
+
   auto start = high_resolution_clock::now();
 
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer); // Secondary Hotspot
@@ -236,7 +252,7 @@ void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
 
   auto serial_start = high_resolution_clock::now();
 
-  apply_filters();
+  // apply_filters();
 
   writeOutBmp24(fileBuffer, "output.bmp", bufferSize);
 
