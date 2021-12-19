@@ -301,9 +301,17 @@ void* sepia(void *tid)
   for (int i = 0; i < TH_ROW; i++)
     for (int j = 0; j < cols; j++)
     {
-      pixels_threads[id][i][j][0] = min(((real_pixels[id*TH_ROW+i][j][0]*0.393) + (real_pixels[id*TH_ROW+i][j][1]*0.769) + (real_pixels[id*TH_ROW+i][j][2]*0.189)), 255.00);
-      pixels_threads[id][i][j][1] = min(((real_pixels[id*TH_ROW+i][j][0]*0.349) + (real_pixels[id*TH_ROW+i][j][1]*0.686) + (real_pixels[id*TH_ROW+i][j][2]*0.168)), 255.00);
-      pixels_threads[id][i][j][2] = min(((real_pixels[id*TH_ROW+i][j][0]*0.272) + (real_pixels[id*TH_ROW+i][j][1]*0.534) + (real_pixels[id*TH_ROW+i][j][2]*0.131)), 255.00);
+      pixels_threads[id][i][j][0] = min(((real_pixels[id*TH_ROW+i][j][0]*0.393) 
+                                       + (real_pixels[id*TH_ROW+i][j][1]*0.769) 
+                                       + (real_pixels[id*TH_ROW+i][j][2]*0.189)), 255.00);
+
+      pixels_threads[id][i][j][1] = min(((real_pixels[id*TH_ROW+i][j][0]*0.349) 
+                                       + (real_pixels[id*TH_ROW+i][j][1]*0.686) 
+                                       + (real_pixels[id*TH_ROW+i][j][2]*0.168)), 255.00);
+
+      pixels_threads[id][i][j][2] = min(((real_pixels[id*TH_ROW+i][j][0]*0.272) 
+                                       + (real_pixels[id*TH_ROW+i][j][1]*0.534) 
+                                       + (real_pixels[id*TH_ROW+i][j][2]*0.131)), 255.00);
     }
 }
 

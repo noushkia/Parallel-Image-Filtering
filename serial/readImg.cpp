@@ -194,7 +194,7 @@ void apply_filters()
 
     start = high_resolution_clock::now();
 
-    update_real_pixels();    
+    update_real_pixels();  
 
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
@@ -219,8 +219,6 @@ void filter_serial(char *fileBuffer, int bufferSize, char *fileName)
   cout << "Time taken for reading image: " << std::fixed
                                            << std::setprecision(2)
                                            << duration.count()/1000.0 << " ms" << endl;
-
-  pixels = real_pixels;
 
   apply_filters();
 
