@@ -1,28 +1,23 @@
 #include "threads.hpp"
 #include <iostream>
-
-using namespace std;
-
-void initialize_pixels_threads(int NUMBER_OF_THREADS, int rows, int cols, std::vector<RGBS> &pixels_threads)
+void initialize_pixels_threads(int NUMBER_OF_THREADS, int rows, int cols, RGBS* &pixels_threads)
 {
+    pixels_threads = new RGBS[NUMBER_OF_THREADS];
     for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
     {
-        auto pixels_thread = new unsigned char**[rows];
+        pixels_threads[tid] = new unsigned char**[rows];
         for (int i = 0; i < rows; i++) {
-            pixels_thread[i] = new unsigned char*[cols];
+            pixels_threads[tid][i] = new unsigned char*[cols];
             for (int j = 0; j < cols; j++) {
-                pixels_thread[i][j] = new unsigned char[color_pallete];
+                pixels_threads[tid][i][j] = new unsigned char[color_pallete];
             }
         }
-        pixels_threads.push_back(pixels_thread);
     }
-
-    // pthread_exit(NULL);
 }
 
 void* getImg(void* rows)
 {
-    struct Row curr_row = *(struct Row *) rows; // How to assign void* as struct
+    struct Row curr_row = *(struct Row *) rows;
     for (int i = 0; i < TH_ROW; i++)
     {
         for (int j = curr_row.cols - 1; j >= 0; j--)
@@ -43,6 +38,4 @@ void* getImg(void* rows)
                 curr_row.count++;
             }
     }
-
-    // pthread_exit(NULL);
 }

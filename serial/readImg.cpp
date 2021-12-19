@@ -220,6 +220,8 @@ void apply_filters()
 
 void filter_serial(char *fileBuffer, int bufferSize, char *fileName)
 {
+  auto serial_start = high_resolution_clock::now();
+
   auto start = high_resolution_clock::now();
 
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer); // Secondary Hotspot
@@ -231,8 +233,6 @@ void filter_serial(char *fileBuffer, int bufferSize, char *fileName)
                                            << duration.count()/1000.0 << " ms" << endl;
 
   pixels = real_pixels;
-
-  auto serial_start = high_resolution_clock::now();
 
   apply_filters();
 

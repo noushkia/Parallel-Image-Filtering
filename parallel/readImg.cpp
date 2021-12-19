@@ -20,39 +20,12 @@ using std::ofstream;
 using namespace std;
 using namespace std::chrono;
 
-#pragma pack(1)
-#pragma once
-
-typedef struct tagBITMAPFILEHEADER
-{
-  WORD bfType;
-  DWORD bfSize;
-  WORD bfReserved1;
-  WORD bfReserved2;
-  DWORD bfOffBits;
-} BITMAPFILEHEADER, *PBITMAPFILEHEADER;
-
-typedef struct tagBITMAPINFOHEADER
-{
-  DWORD biSize;
-  LONG biWidth;
-  LONG biHeight;
-  WORD biPlanes;
-  WORD biBitCount;
-  DWORD biCompression;
-  DWORD biSizepixels;
-  LONG biXPelsPerMeter;
-  LONG biYPelsPerMeter;
-  DWORD biClrUsed;
-  DWORD biClrImportant;
-} BITMAPINFOHEADER, *PBITMAPINFOHEADER;
-
 int rows;
 int cols;
 unsigned char avg[color_pallete];
 
 RGBS real_pixels;
-vector<RGBS> pixels_threads;
+RGBS* pixels_threads;
 
 void* blur(void *tid);
 void* sepia(void *tid);
@@ -71,7 +44,7 @@ void initialize_pixels()
   }
 }
 
-void set_color(int row, int col, const int color[]) // Move to threads
+void set_color(int row, int col, const int color[])
 {
   for (int i = 0; i < color_pallete; i++)
     real_pixels[row][col][i] = color[i];
@@ -130,43 +103,28 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer) // Mu
 
   pthread_t threads[NUMBER_OF_THREADS];
 
-  vector<struct Row> thread_rows;
+  struct Row thread_rows[NUMBER_OF_THREADS];
 
   for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
   {
     count += extra;
 
-    thread_rows.push_back({
+    thread_rows[tid] = {
       count,
       end,
       cols,
       fileReadBuffer,
       pixels_threads[tid]
-    });
-
+    };
     count += TH_ROW*cols*color_pallete;
   }
-  
-  for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
-  {
-    int return_code = pthread_create(&threads[tid], NULL, getImg, &thread_rows[tid]);
-		if (return_code)
-		{
-      cerr << "ERROR! return code from pthread_create() is " << return_code << endl;
-      exit(-1);
-		}
 
-  }
+  for (int tid = 0; tid < NUMBER_OF_THREADS; tid++)
+    pthread_create(&threads[tid], NULL, getImg, &thread_rows[tid]);
 
   for (int tid = 0 ; tid < NUMBER_OF_THREADS ; tid++)
-  {
-    int return_code = pthread_join(threads[tid], NULL);
-    if (return_code)
-    {
-      cerr << "ERROR! return code from pthread_join() is " << return_code << endl;
-      exit(-1);
-    }
-  }
+    pthread_join(threads[tid], NULL);
+    
 }
 
 void writeOutBmp24(char *fileBuffer, const string &nameOfFileToCreate, int bufferSize)
@@ -211,25 +169,10 @@ void apply_to_threads(void *(*filter) (void *))
   pthread_t threads[NUMBER_OF_THREADS];
 
   for (long tid = 0; tid < NUMBER_OF_THREADS; tid++)
-  {
-    int return_code = pthread_create(&threads[tid], NULL, filter, (void*)tid);
-		if (return_code)
-		{
-      cerr << "ERROR! return code from pthread_create() is " << return_code << endl;
-      exit(-1);
-		}
-
-  }
+    pthread_create(&threads[tid], NULL, filter, (void*)tid);
 
   for (long tid = 0 ; tid < NUMBER_OF_THREADS ; tid++)
-  {
-    int return_code = pthread_join(threads[tid], NULL);
-    if (return_code)
-    {
-      cerr << "ERROR! return code from pthread_join() is " << return_code << endl;
-      exit(-1);
-    }
-  }
+    pthread_join(threads[tid], NULL);
 }
 
 void apply_filters()
@@ -282,9 +225,11 @@ void apply_filters()
 
 void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
 {
+  auto parallel_start = high_resolution_clock::now();
+
   int NUMBER_OF_THREADS = rows / TH_ROW;
 
-  initialize_pixels_threads(NUMBER_OF_THREADS, rows, cols, pixels_threads);
+  initialize_pixels_threads(NUMBER_OF_THREADS, TH_ROW, cols, pixels_threads);
 
   auto start = high_resolution_clock::now();
 
@@ -298,8 +243,6 @@ void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
 
   update_real_pixels();
 
-  auto parallel_start = high_resolution_clock::now();
-
   apply_filters();
 
   writeOutBmp24(fileBuffer, "output.bmp", bufferSize);
@@ -310,8 +253,6 @@ void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
                                               << std::fixed
                                               << std::setprecision(2)
                                               << (parallel_duration.count()/1000.0) << " ms" << endl;
-
-  return;
 }
 
 int main(int argc, char *argv[])
@@ -403,6 +344,4 @@ void add_X()
       set_color(i, cols - 1 - i-j, WHITE);
       set_color(i+j, cols - 1 - i, WHITE);
     }
-
-    return;
 }

@@ -14,7 +14,7 @@ struct Row
     RGBS pixels;
 };
 
-void initialize_pixels_threads(int NUMBER_OF_THREADS, int rows, int cols, std::vector<RGBS> &pixels_threads);
+void initialize_pixels_threads(int NUMBER_OF_THREADS, int rows, int cols, RGBS* &pixels_threads);
 
 void* getImg(void* rows);
 
