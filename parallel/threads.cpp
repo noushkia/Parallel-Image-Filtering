@@ -16,12 +16,14 @@ void initialize_pixels_threads(int NUMBER_OF_THREADS, int rows, int cols, std::v
         }
         pixels_threads.push_back(pixels_thread);
     }
+
+    // pthread_exit(NULL);
 }
 
 void* getImg(void* rows)
 {
     struct Row curr_row = *(struct Row *) rows; // How to assign void* as struct
-    for (int i = 0; i < curr_row.rows; i++)
+    for (int i = 0; i < TH_ROW; i++)
     {
         for (int j = curr_row.cols - 1; j >= 0; j--)
             for (int k = 0; k < 3; k++)
@@ -41,4 +43,6 @@ void* getImg(void* rows)
                 curr_row.count++;
             }
     }
+
+    // pthread_exit(NULL);
 }

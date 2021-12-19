@@ -10,7 +10,6 @@ struct Row
     int count;
     int end;
     int cols;
-    int rows;
     char *fileReadBuffer;
     RGBS pixels;
 };

@@ -49,14 +49,16 @@ typedef struct tagBITMAPINFOHEADER
 
 int rows;
 int cols;
-RGBS pixels;
+unsigned char avg[color_pallete];
+
 RGBS real_pixels;
 vector<RGBS> pixels_threads;
 
-void blur(int lvl);
-void sepia();
-void mean();
-void add_X(int width);
+void* blur(void *tid);
+void* sepia(void *tid);
+void set_total_avg();
+void* mean(void *tid);
+void add_X();
 
 void initialize_pixels()
 {
@@ -72,7 +74,22 @@ void initialize_pixels()
 void set_color(int row, int col, const int color[]) // Move to threads
 {
   for (int i = 0; i < color_pallete; i++)
-    pixels[row][col][i] = color[i];
+    real_pixels[row][col][i] = color[i];
+}
+
+void update_real_pixels()
+{
+  for (int tid = 0; tid < rows/TH_ROW; tid++)
+  {
+    for (int i = 0; i < TH_ROW; i++)
+    {
+      for (int j = 0; j < cols; j++)
+      {
+        for (int k = 0; k < color_pallete; k++)
+          real_pixels[tid*TH_ROW + i][j][k] = pixels_threads[tid][i][j][k];
+      }
+    }
+  }
 }
 
 bool fillAndAllocate(char *&buffer, const char *fileName, int &rows, int &cols, int &bufferSize)
@@ -123,7 +140,6 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer) // Mu
       count,
       end,
       cols,
-      TH_ROW,
       fileReadBuffer,
       pixels_threads[tid]
     });
@@ -164,52 +180,85 @@ void writeOutBmp24(char *fileBuffer, const string &nameOfFileToCreate, int buffe
 
   int count = 1;
   int extra = cols % 4;
-  for (int tid = 0; tid < rows/TH_ROW; tid++)
+  for (int i = 0; i < rows; i++)
   {
-    for (int i = 0; i < TH_ROW; i++)
-    {
-      count += extra;
-      for (int j = cols - 1; j >= 0; j--)
-        for (int k = 0; k < 3; k++)
+    count += extra;
+    for (int j = cols - 1; j >= 0; j--)
+      for (int k = 0; k < 3; k++)
+      {
+        switch (k)
         {
-          switch (k)
-          {
-          case 0:
-            fileBuffer[bufferSize - count] = pixels_threads[tid][i][j][RED];
-            break;
-          case 1:
-            fileBuffer[bufferSize - count] = pixels_threads[tid][i][j][GREEN];
-            break;
-          case 2:
-            fileBuffer[bufferSize - count] = pixels_threads[tid][i][j][BLUE];
-            break;
-          }
-          count++;
+        case 0:
+          fileBuffer[bufferSize - count] = real_pixels[i][j][RED];
+          break;
+        case 1:
+          fileBuffer[bufferSize - count] = real_pixels[i][j][GREEN];
+          break;
+        case 2:
+          fileBuffer[bufferSize - count] = real_pixels[i][j][BLUE];
+          break;
         }
+        count++;
+      }
+  }
+  
+  write.write(fileBuffer, bufferSize);
+}
+
+void apply_to_threads(void *(*filter) (void *))
+{
+  int NUMBER_OF_THREADS = rows / TH_ROW;
+  pthread_t threads[NUMBER_OF_THREADS];
+
+  for (long tid = 0; tid < NUMBER_OF_THREADS; tid++)
+  {
+    int return_code = pthread_create(&threads[tid], NULL, filter, (void*)tid);
+		if (return_code)
+		{
+      cerr << "ERROR! return code from pthread_create() is " << return_code << endl;
+      exit(-1);
+		}
+
+  }
+
+  for (long tid = 0 ; tid < NUMBER_OF_THREADS ; tid++)
+  {
+    int return_code = pthread_join(threads[tid], NULL);
+    if (return_code)
+    {
+      cerr << "ERROR! return code from pthread_join() is " << return_code << endl;
+      exit(-1);
     }
   }
-  write.write(fileBuffer, bufferSize);
 }
 
 void apply_filters()
 {
   for (int i = 0; i < TOTAL_FILTERS; i++) {
+    bool update_real = true;
     auto start = high_resolution_clock::now();
     switch (i) // The Main Hotspot
     {
     case BLUR:
-      blur(1); // Most time taken
+      cout << "Applying blur filter\n";
+      apply_to_threads(blur);
       break;
     case SEPIA:
-      sepia();
+      cout << "Applying sepia filter\n";
+      apply_to_threads(sepia);
       break;
     case MEAN:
-      mean();
+      cout << "Applying mean filter\n";
+      set_total_avg();
+      apply_to_threads(mean);
       break;
     case ADDX:
-      add_X(2); // Least time taken
+      cout << "Applying X filter\n";
+      add_X(); // Least time taken
+      update_real = false;
       break;
     }
+
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
     cout << "Time taken: " << std::fixed
@@ -218,7 +267,8 @@ void apply_filters()
 
     start = high_resolution_clock::now();
 
-    // real_pixels = pixels_threads;
+    if (update_real)
+      update_real_pixels();
 
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
@@ -234,7 +284,7 @@ void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
 {
   int NUMBER_OF_THREADS = rows / TH_ROW;
 
-  initialize_pixels_threads(NUMBER_OF_THREADS, TH_ROW, cols, pixels_threads);
+  initialize_pixels_threads(NUMBER_OF_THREADS, rows, cols, pixels_threads);
 
   auto start = high_resolution_clock::now();
 
@@ -246,20 +296,20 @@ void filter_parallel(char *fileBuffer, int bufferSize, char *fileName)
                                            << std::setprecision(2)
                                            << duration.count()/1000.0 << " ms" << endl;
 
-  // real_pixels = pixels_threads;
+  update_real_pixels();
 
-  auto serial_start = high_resolution_clock::now();
+  auto parallel_start = high_resolution_clock::now();
 
-  // apply_filters();
+  apply_filters();
 
   writeOutBmp24(fileBuffer, "output.bmp", bufferSize);
 
-  auto serial_end = high_resolution_clock::now();
-  auto serial_duration = duration_cast<microseconds>(serial_end - serial_start);
+  auto parallel_end = high_resolution_clock::now();
+  auto parallel_duration = duration_cast<microseconds>(parallel_end - parallel_start);
   cout << "Total time taken for applying filters and writing images: " 
                                               << std::fixed
                                               << std::setprecision(2)
-                                              << (serial_duration.count()/1000.0) << " ms" << endl;
+                                              << (parallel_duration.count()/1000.0) << " ms" << endl;
 
   return;
 }
@@ -291,39 +341,36 @@ int blur_color(int i, int j, int color, int lvl)
 	return blurred / pow(lvl*2+1, 2);
 }
 
-void blur(int lvl)
+void* blur(void* tid)
 {
-  cout << "Initiating blur filter" << endl;
+  int lvl = blur_lvl;
+  long id = (long) tid;
 
-	for (int i = 0; i < rows; i++) {
+	for (int i = 0; i < TH_ROW; i++) {
 		for (int j = 0; j < cols; j++)
       for (int k = 0; k < color_pallete; k++)
-        pixels[i][j][k] = blur_color(i, j, k, lvl);
+        pixels_threads[id][i][j][k] = blur_color(id*TH_ROW + i, j, k, lvl);
   }
-
-  cout << "Filter successfull" << endl;
-    
-  return;
 }
 
-void sepia()
+void* sepia(void *tid)
 {
-    cout << "Initiating sepia filter" << endl;
+  long id = (long) tid;
 
-    for (int i = 0; i < rows; i++)
-      for (int j = 0; j < cols; j++)
-      {
-        pixels[i][j][0] = min(((real_pixels[i][j][0]*0.393) + (real_pixels[i][j][1]*0.769) + (real_pixels[i][j][2]*0.189)), 255.00);
-        pixels[i][j][1] = min(((real_pixels[i][j][0]*0.349) + (real_pixels[i][j][1]*0.686) + (real_pixels[i][j][2]*0.168)), 255.00);
-        pixels[i][j][2] = min(((real_pixels[i][j][0]*0.272) + (real_pixels[i][j][1]*0.534) + (real_pixels[i][j][2]*0.131)), 255.00);
-      }
-
-    cout << "Filter successfull" << endl;
-    return;
+  for (int i = 0; i < TH_ROW; i++)
+    for (int j = 0; j < cols; j++)
+    {
+      pixels_threads[id][i][j][0] = min(((real_pixels[id*TH_ROW+i][j][0]*0.393) + (real_pixels[id*TH_ROW+i][j][1]*0.769) + (real_pixels[id*TH_ROW+i][j][2]*0.189)), 255.00);
+      pixels_threads[id][i][j][1] = min(((real_pixels[id*TH_ROW+i][j][0]*0.349) + (real_pixels[id*TH_ROW+i][j][1]*0.686) + (real_pixels[id*TH_ROW+i][j][2]*0.168)), 255.00);
+      pixels_threads[id][i][j][2] = min(((real_pixels[id*TH_ROW+i][j][0]*0.272) + (real_pixels[id*TH_ROW+i][j][1]*0.534) + (real_pixels[id*TH_ROW+i][j][2]*0.131)), 255.00);
+    }
 }
 
-void get_total_avg(unsigned char avg[])
+void set_total_avg()
 {
+  for (int k = 0; k < color_pallete; k++)
+    avg[k] = 0;
+
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
       for (int k = 0; k < color_pallete; k++)
@@ -331,31 +378,21 @@ void get_total_avg(unsigned char avg[])
 
   for (int i = 0; i < color_pallete; i++)
     avg[i] /= (rows*cols);
-
-  return;
 }
 
-void mean()
+void* mean(void *tid)
 {
-    cout << "Initiating mean filter" << endl;
+  long id = (long) tid;
 
-    unsigned char avg[color_pallete];
-    for (int k = 0; k < color_pallete; k++)
-      avg[k] = 0;
-    get_total_avg(avg);
-
-    for (int i = 0; i < rows; i++)
-      for (int j = 0; j < cols; j++)
-        for (int k = 0; k < color_pallete; k++)
-          pixels[i][j][k] = min((real_pixels[i][j][k]*0.4 + avg[k]*0.6), 255.00);
-
-    cout << "Filter successfull" << endl;
-    return;
+  for (int i = 0; i < TH_ROW; i++)
+    for (int j = 0; j < cols; j++)
+      for (int k = 0; k < color_pallete; k++)
+        pixels_threads[id][i][j][k] = min((real_pixels[id*TH_ROW+i][j][k]*0.4 + avg[k]*0.6), 255.00);
 }
 
-void add_X(int width)
+void add_X()
 {
-  cout << "Initiating X filter" << endl;
+  int width = x_width;
 
 	for (int i = width; i < rows-width; i++)
     for (int j = -width; j <= width; j++) {
@@ -367,6 +404,5 @@ void add_X(int width)
       set_color(i+j, cols - 1 - i, WHITE);
     }
 
-    cout << "Filter successfull" << endl;
     return;
 }

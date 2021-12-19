@@ -15,9 +15,9 @@
 
 const int color_pallete = 3;
 const int WHITE[] = {255, 255, 255};
-
-const int TH_ROW = 50;
-
+const int TH_ROW = 25;
+const int blur_lvl = 1;
+const int x_width = 1;
 const std::string output_dir = "Filtered/";
 
 
